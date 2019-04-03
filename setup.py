@@ -26,4 +26,5 @@ setup(
     keywords='image cluster vgg16 deep-learning',
     packages=['imagecluster'],
     install_requires=open('requirements.txt').read().splitlines(),
+    include_package_data=True,
 )

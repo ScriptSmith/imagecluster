@@ -4,3 +4,5 @@ keras
 Pillow
 scikit-learn
 matplotlib
+tqdm
+jinja2

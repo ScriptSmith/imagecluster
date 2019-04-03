@@ -8,6 +8,7 @@ import PIL.Image
 from scipy.spatial import distance
 from scipy.cluster import hierarchy
 import numpy as np
+from tqdm import tqdm
 from sklearn.decomposition import PCA
 
 from keras.applications.vgg16 import VGG16, preprocess_input
@@ -54,6 +55,7 @@ def get_model(layer='fc2'):
 def load_img_rgb(fn):
     return PIL.Image.open(fn).convert('RGB')
 
+
 # keras.preprocessing.image.load_img() uses img.rezize(shape) with the default
 # interpolation of PIL.Image.resize() which is pretty bad (see
 # imagecluster/play/pil_resample_methods.py). Given that we are restricted to
@@ -66,7 +68,6 @@ def load_img_rgb(fn):
 ##img = image.load_img(fn, target_size=size)
 ##... = image.img_to_array(img)
 def _img_worker(fn, size):
-    print(fn)
     return fn, image.img_to_array(load_img_rgb(fn).resize(size, 3),
                                   dtype=int)
 
@@ -88,9 +89,14 @@ def image_arrays(imagedir, size):
         }
     """
     _f = functools.partial(_img_worker, size=size)
+    file_list = common.get_files(imagedir)
+
     with mp.Pool(mp.cpu_count()) as pool:
-        ret = pool.map(_f, common.get_files(imagedir))
-    return dict(ret)
+        ret = []
+        for file in tqdm(pool.imap(_f, file_list), total=len(file_list),
+                         desc=f"Reading images from {imagedir}"):
+            ret.append(file)
+        return dict(ret)
 
 
 def fingerprint(img_arr, model):
@@ -129,7 +135,7 @@ def fingerprint(img_arr, model):
 
     # (1, 224, 224, 3)
     arr4d_pp = preprocess_input(arr4d)
-    return model.predict(arr4d_pp)[0,:]
+    return model.predict(arr4d_pp)[0, :]
 
 
 # Cannot use multiprocessing (only tensorflow backend tested, rumor has it that
@@ -170,10 +176,30 @@ def fingerprints(ias, model):
          }
     """
     fps = {}
-    for fn,img_arr in ias.items():
-        print(fn)
+    images = ias.items()
+    for fn, img_arr in tqdm(images, total=len(images), desc="Fingerprinting"):
         fps[fn] = fingerprint(img_arr, model)
     return fps
+
+
+def fingerprint_stream(imagedir, size=(224, 224)):
+    """Stream images from directory and generate fingerprints for them
+    :param imagedir: the directory of images
+    :param size: image resize dimensions (width, height)
+    :return:
+    """
+    image_filenames = common.get_files(imagedir)
+    model = get_model()
+
+    file_fingerprints = OrderedDict()
+    itr = tqdm(image_filenames, total=len(image_filenames),
+               desc=f"Fingerprinting {imagedir}")
+
+    for filename in itr:
+        img_arr = image.img_to_array(load_img_rgb(filename).resize(size, 3),
+                                     dtype=int)
+        file_fingerprints[filename] = fingerprint(img_arr, model)
+    return file_fingerprints
 
 
 def pca(fps, n_components=0.9, **kwds):
@@ -183,7 +209,7 @@ def pca(fps, n_components=0.9, **kwds):
     _fps = OrderedDict(fps)
     X = np.array(list(_fps.values()))
     Xp = PCA(**kwds).fit(X).transform(X)
-    return {k:v for k,v in zip(_fps.keys(), Xp)}
+    return {k: v for k, v in zip(_fps.keys(), Xp)}
 
 
 def cluster(fps, sim=0.5, method='average', metric='euclidean',
@@ -235,9 +261,10 @@ def cluster(fps, sim=0.5, method='average', metric='euclidean',
     Z = hierarchy.linkage(dfps, method=method, metric=metric)
     # cut dendrogram, extract clusters
     # cut=[12,  3, 29, 14, 28, 27,...]: image i belongs to cluster cut[i]
-    cut = hierarchy.fcluster(Z, t=dfps.max()*(1.0-sim), criterion='distance')
+    cut = hierarchy.fcluster(Z, t=dfps.max() * (1.0 - sim),
+                             criterion='distance')
     cluster_dct = dict((iclus, []) for iclus in np.unique(cut))
-    for iimg,iclus in enumerate(cut):
+    for iimg, iclus in enumerate(cut):
         cluster_dct[iclus].append(files[iimg])
     # group all clusters (cluster = list_of_files) of equal size together
     # {number_of_files1: [[list_of_files], [list_of_files],...],
@@ -277,10 +304,37 @@ def cluster_stats(clusters):
                      np.sort(list(clusters.keys()))], dtype=int)
 
 
+def descend_cluster(cluster_node, tree_node):
+    for cluster_child in [cluster_node.left, cluster_node.right]:
+        if cluster_child:
+            new_node = {
+                "name": cluster_child.id,
+                "distance": cluster_child.dist,
+                "children": []
+            }
+            tree_node["children"].append(new_node)
+            descend_cluster(cluster_child, new_node)
+
+
+def cluster_tree(fps, method='average', metric='euclidean'):
+    dfps = distance.pdist(np.array(list(fps.values())), metric)
+    Z = hierarchy.linkage(dfps, method=method, metric=metric)
+    cluster_root = hierarchy.to_tree(Z)
+
+    tree = {
+        "name": "root",
+        "distance": 0,
+        "children": []
+    }
+
+    descend_cluster(cluster_root, tree)
+    return tree
+
+
 def print_cluster_stats(clusters):
     print("#images : #clusters")
     stats = cluster_stats(clusters)
-    for csize,cnum in stats:
+    for csize, cnum in stats:
         print(f"{csize} : {cnum}")
     if stats.shape[0] > 0:
         nimg = stats.prod(axis=1).sum()

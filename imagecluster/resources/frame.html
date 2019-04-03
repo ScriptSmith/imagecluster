@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ImageCluster</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.9.2/d3.min.js"></script>
+    <style>
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        #main div {
+            float: left;
+            width: 50%;
+            height: 99vh;
+        }
+
+        #right div {
+            clear: left;
+            height: 50%;
+            width: 100%;
+        }
+
+        #left {
+            background-color: lightblue;
+        }
+
+        #controls {
+            background-color: lightgreen;
+        }
+
+        #controls form {
+            width: auto;
+            height: auto;
+        }
+
+        #clusters {
+            background-color: lightcoral;
+        }
+
+        .node {
+            fill: steelblue;
+            stroke: none;
+        }
+
+        .link {
+            fill: none;
+            stroke: #ccc;
+            stroke-width: 1px;
+        }
+    </style>
+</head>
+<body>
+<script>
+</script>
+<div id="main">
+    <div id="left"></div>
+    <div id="right">
+        <div id="controls">
+            <h1>Controls</h1>
+            <form autocomplete="off">
+                <label for="graphShape">Graph shape</label>
+                <select id="graphShape">
+                    <option>Dendrogram</option>
+                    <option>Force-directed Dendrogram</option>
+                    <option>Radial dendrogram</option>
+                    <option>Force-directed Radial dendrogram</option>
+                    <option>Treemap</option>
+                </select>
+                <br>
+                <label for="flatSlider">Cluster distance flattening</label>
+                <input id="flatSlider" type="range" step="0.000001" oninput="flatValue.value = flatSlider.value"
+                       value="0">
+                <input id="flatValue" type="text" oninput="flatSlider.value = flatValue.value" value="0">
+                <br>
+                <label for="compactCheck">Compact clusters</label>
+                <input id="compactCheck" type="checkbox" checked>
+                <br>
+                <label for="distanceHeightCheck">Distance as node height</label>
+                <input id="distanceHeightCheck" type="checkbox">
+            </form>
+        </div>
+        <div id="clusters">
+            List where each row is cluster. Clusters are a list of 10 thumbnails, click to display full image. Maybe
+            display common objects detected
+        </div>
+        <!--TODO
+
+        - Dragging and zooming
+        - Force-direction tree and radial modes
+        - Treemap mode
+
+        -->
+    </div>
+</div>
+</body>
+</html>
